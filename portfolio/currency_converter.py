@@ -39,34 +39,32 @@ def find_fx_symbol_for_quote_currency(quote_currency, cached_symbols):
 def convert_series_to_usd(symbol_close, symbol_name, symbol_info, cached_symbols, bars, timeframe):
     original = symbol_close.rename(symbol_name)
 
-    # Determine quote currency
-    quote_currency = getattr(symbol_info, "currency_profit", None)
+    # --- Extract base & quote currency ---
     base_currency = getattr(symbol_info, "currency_base", None)
+    quote_currency = getattr(symbol_info, "currency_profit", None)
 
-    if quote_currency is None or base_currency is None:
-        logging.warning("Symbol info missing currencies for %s. Returning original.", symbol_name)
+    if not base_currency or not quote_currency:
+        logging.warning("Missing currency info for %s, returning original", symbol_name)
         return original
 
-    quote_currency = quote_currency.upper()
     base_currency = base_currency.upper()
+    quote_currency = quote_currency.upper()
 
-    # If quote currency is USD, just multiply by 1
+    # --- FX pair handling ---
+    # Case 1: quote currency is USD (XXXUSD) -> already USD/unit -> leave as-is
     if quote_currency == "USD":
         return original
 
-    # If base currency is USD (USDXXX), invert FX
+    # Case 2: base currency is USD (USDXXX) -> invert to get USD/unit
     if base_currency == "USD":
-        fx_symbol = symbol_name
-        invert = True
-        fx_closes = original  # use own series for inversion
         try:
-            usd_price = 1.0 / fx_closes.replace(0, float("nan"))
+            usd_price = 1.0 / original.replace(0, float("nan"))
         except Exception:
             logging.exception("Failed to invert FX %s", symbol_name)
             return original
         return usd_price.dropna().rename(symbol_name)
 
-    # Else: convert quote currency -> USD using FX
+    # --- Non-FX instruments: convert quote currency -> USD ---
     fx_symbol, invert = find_fx_symbol_for_quote_currency(quote_currency, cached_symbols)
     if not fx_symbol:
         logging.warning(
@@ -97,6 +95,7 @@ def convert_series_to_usd(symbol_close, symbol_name, symbol_info, cached_symbols
 
     df.columns = ["asset", "fx"]
 
+    # Convert to USD
     try:
         usd_price = df["asset"] / df["fx"] if invert else df["asset"] * df["fx"]
     except Exception:
