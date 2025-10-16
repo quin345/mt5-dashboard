@@ -26,23 +26,40 @@ def main():
     try:
         init_mt5()
         symbols = get_marketwatch_symbols()
+        cached_symbols = set(symbols)  # for fast FX lookup
         usd_panel = {}
 
         for sym in symbols:
             data = fetch_closes(sym, LOOKBACK_DAYS, TIMEFRAME)
-            if data is None:
+            if data is None or data.empty:
+                logging.warning("No price data for %s, skipping.", sym)
                 continue
 
             info = mt5.symbol_info(sym)
-            usd_series = convert_series_to_usd(data, sym, info, symbols, LOOKBACK_DAYS, TIMEFRAME)
-            if usd_series is not None:
+            if info is None:
+                logging.warning("No symbol info for %s, skipping.", sym)
+                continue
+
+            usd_series = convert_series_to_usd(
+                symbol_close=data,
+                symbol_name=sym,
+                symbol_info=info,
+                cached_symbols=cached_symbols,
+                bars=LOOKBACK_DAYS,
+                timeframe=TIMEFRAME
+            )
+
+            if usd_series is not None and not usd_series.empty:
                 usd_panel[sym] = usd_series
 
         if not usd_panel:
             logging.error("No valid USD-converted data found. Exiting.")
             return
 
+        # Align all series on common timestamps
         price_panel = pd.concat(usd_panel.values(), axis=1, join='inner')
+        price_panel.columns = list(usd_panel.keys())
+
         returns, mu, cov = compute_returns_and_stats(price_panel)
         weights, p_ret, p_vol, sharpe = max_sharpe_portfolio(mu, cov, RISK_FREE_RATE_ANNUAL, ALLOW_SHORTS)
 
@@ -58,7 +75,7 @@ def main():
         print("\n=== Max-Sharpe Portfolio ===\n")
         print(results.sort_values('weight', ascending=False))
 
-        # --- Plot Efficient Frontier, Sharpe, VaR & CVaR ---
+        # --- Plot Efficient Frontier ---
         try:
             print("\n>>> Generating efficient frontier plot...")
             plot_efficient_frontier(mu, cov, RISK_FREE_RATE_ANNUAL, allow_shorts=ALLOW_SHORTS)
