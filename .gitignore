@@ -7,3 +7,13 @@
 
 # Ignore all PNG image files
 *.png
+*.js
+*.json
+
+# Ignore Node.js dependencies
+node_modules/
+
+# Optional: Ignore lock files (if you don't want to track them)
+package-lock.json
+yarn.lock
+pnpm-lock.yaml

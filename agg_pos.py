@@ -1,6 +1,7 @@
 # save as mt5_aggregate_positions.py
 import MetaTrader5 as mt5
 import pandas as pd
+import os
 
 # ---------- Connect to MetaTrader5 ----------
 if not mt5.initialize():
@@ -45,6 +46,11 @@ agg = pd.concat([agg, total], ignore_index=True)
 
 # ---------- Output ----------
 print(agg.to_string(index=False))
+
+# ---------- Save to CSV ----------
+output_file = os.path.join(os.getcwd(), "open_positions_summary.csv")
+agg.to_csv(output_file, index=False)
+print(f"\nCSV file saved to: {output_file}")
 
 # ---------- Clean up ----------
 mt5.shutdown()
