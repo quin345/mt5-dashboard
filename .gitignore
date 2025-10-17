@@ -7,7 +7,6 @@
 
 # Ignore all PNG image files
 *.png
-*.js
 *.json
 
 # Ignore Node.js dependencies
