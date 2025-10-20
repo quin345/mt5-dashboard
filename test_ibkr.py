@@ -11,6 +11,7 @@ portfolio = ib.portfolio()
 # Convert to DataFrame
 data = [{
     'Symbol': p.contract.symbol,
+    'Asset Class': p.contract.secType,
     'Currency': p.contract.currency,
     'Position': p.position,
     'Avg Cost': p.averageCost,
@@ -21,8 +22,12 @@ data = [{
 
 df = pd.DataFrame(data)
 
-# Display the table
-print(df)
+# Group by Asset Class and display each group
+grouped = df.groupby('Asset Class')
+
+for asset_class, group in grouped:
+    print(f"\nAsset Class: {asset_class}")
+    print(group)
 
 # Disconnect
 ib.disconnect()
