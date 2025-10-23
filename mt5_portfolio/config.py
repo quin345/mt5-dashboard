@@ -5,7 +5,7 @@ Central configuration file for MT5 Portfolio Optimizer.
 Adjust parameters here instead of modifying main modules.
 """
 
-LOOKBACK_DAYS = 300
+LOOKBACK_DAYS = 90
 TIMEFRAME = "TIMEFRAME_D1"   # will be evaluated dynamically in mt5_connector
 RISK_FREE_RATE_ANNUAL = 0.02
 ALLOW_SHORTS = False
