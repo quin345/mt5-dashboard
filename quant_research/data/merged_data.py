@@ -33,3 +33,11 @@ merged_df.to_sql(table_name, conn, if_exists='replace', index=False)
 conn.close()
 
 print(f"\n✅ Stored merged data in {db_file} under table '{table_name}'")
+
+# ---------- Delete CSV files ----------
+for file in csv_files:
+    try:
+        os.remove(file)
+        print(f"🗑️ Deleted {file}")
+    except Exception as e:
+        print(f"⚠️ Failed to delete {file}: {e}")

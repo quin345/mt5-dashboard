@@ -16,7 +16,7 @@ const instruments = [
 ]; // Add more as needed
 
 // Date range: from Jan 1, 2020 to today
-const fromDate = new Date('2020-01-01');
+const fromDate = new Date('2025-10-17');
 const toDate = new Date(); // current date
 
 // Timeframe: daily candles
