@@ -1,0 +1,1 @@
+Currency pairs are normalized to USD/unit currency
