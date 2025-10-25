@@ -17,3 +17,7 @@ package-lock.json
 yarn.lock
 pnpm-lock.yaml
 .Rproj.user
+
+# database
+database.sqlite
+market_data.db
