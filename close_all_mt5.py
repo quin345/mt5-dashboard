@@ -41,7 +41,7 @@ else:
             "magic": 0,
             "comment": "Auto-close all trades",
             "type_time": mt5.ORDER_TIME_GTC,
-            "type_filling": mt5.ORDER_FILLING_IOC,
+            "type_filling": mt5.ORDER_FILLING_FOK,
         }
 
         # Send the close request
