@@ -21,7 +21,7 @@ if account_info is None:
     quit()
 
 balance = account_info.balance
-risk_per_trade = 0.01  # 1% risk per trade (adjust as needed)
+risk_per_trade = 0.0001  # 1% risk per trade (adjust as needed)
 total_exposure = balance * risk_per_trade
 
 # Function to send market order
