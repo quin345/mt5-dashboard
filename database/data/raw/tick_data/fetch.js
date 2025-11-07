@@ -12,7 +12,7 @@ const assets = [...new Set([...asian, ...london, ...newyork])];
 
 // Time range: past 24 hours
 const fromDate = new Date(Date.UTC(2025, 10, 5, 14, 0, 0)); // Nov 5, 2025, 14:00 UTC
-const toDate = new Date(Date.UTC(2025, 10, 5, 14, 5, 0));   // Nov 5, 2025, 15:00 UTC
+const toDate = new Date(Date.UTC(2025, 10, 5, 15, 0, 0));   // Nov 5, 2025, 15:00 UTC
 
 (async () => {
   for (const instrument of assets) {

@@ -21,3 +21,6 @@ pnpm-lock.yaml
 # database
 database.sqlite
 market_data.db
+
+MyFixClient/
+*.h5
