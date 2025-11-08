@@ -1,42 +1,40 @@
-import h5py
 import csv
-import calendar
+from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timedelta
+from dukascopy_fetcher import fetch_and_store_tick_data
 
-# Path to your HDF5 file
-hdf5_path = 'audusd_tick_data.h5'  # Change this to your actual filename
-csv_path = 'missing_days_report.csv'
-report_rows = []
+# === Path to your CSV file ===
+csv_file = "missing_day_group.csv"
 
-with h5py.File(hdf5_path, 'r') as f:
-    for symbol in f.keys():  # e.g., 'audusd', 'eurusd'
-        for year_str in f[symbol].keys():
-            if not year_str.startswith('y'):
-                continue
-            year = int(year_str[1:])
-            for month_str in f[symbol][year_str].keys():
-                if not month_str.startswith('m'):
-                    continue
-                month = int(month_str[1:])
-                num_days = calendar.monthrange(year, month)[1]
-                for day in range(1, num_days + 1):
-                    day_str = f'd{str(day).zfill(2)}'
-                    date_str = f"{year}-{str(month).zfill(2)}-{str(day).zfill(2)}"
-                    day_path = f"{symbol}/{year_str}/{month_str}/{day_str}"
-                    missing_group = ''
-                    missing_table = ''
-                    try:
-                        group = f[day_path]
-                        if 'table' not in group:
-                            missing_table = date_str
-                    except KeyError:
-                        missing_group = date_str
-                    if missing_group or missing_table:
-                        report_rows.append([symbol, missing_group, missing_table])
+# === Parse CSV and group dates by instrument ===
+instrument_dates = defaultdict(list)
 
-# Write report to CSV
-with open(csv_path, mode='w', newline='') as file:
-    writer = csv.writer(file)
-    writer.writerow(['Symbol', 'Missing Day Group (yyyy-mm-dd)', 'Missing Table (yyyy-mm-dd)'])
-    writer.writerows(report_rows)
+with open(csv_file, newline='', encoding='utf-8') as f:
+    reader = csv.reader(f)
+    next(reader)  # Skip header
+    for row in reader:
+        if len(row) < 2:
+            continue
+        instrument = row[0].strip()
+        date_str = row[1].strip()
+        try:
+            date = datetime.strptime(date_str, "%Y-%m-%d")
+            instrument_dates[instrument].append(date)
+        except ValueError:
+            print(f"⚠️ Invalid date format: {date_str}")
 
-print(f"✅ Missing days report saved to: {csv_path}")
+# === Function to process one instrument's dates ===
+def process_instrument(instrument, dates):
+    print(f"🚀 Starting fetch for {instrument} with {len(dates)} dates")
+    for date in sorted(dates):
+        try:
+            fetch_and_store_tick_data(date, date + timedelta(days=1), instrument)
+        except Exception as e:
+            print(f"❌ Error fetching {instrument} on {date.date()}: {e}")
+    print(f"✅ Finished {instrument}")
+
+# === Run each instrument group in parallel ===
+with ThreadPoolExecutor(max_workers=32) as executor:
+    for instrument, dates in instrument_dates.items():
+        executor.submit(process_instrument, instrument, dates)

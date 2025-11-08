@@ -5,12 +5,12 @@ import csv
 import calendar
 
 # === Use current working directory ===
-folder_path = "\tick_data"  # Adjust if needed
+folder_path = "tick_data"  # Adjust if needed
 
 # === Output CSV paths ===
-last_update_csv = os.path.join(folder_path, "last_tick_update.csv")
-missing_group_csv = os.path.join(folder_path, "missing_day_group.csv")
-missing_table_csv = os.path.join(folder_path, "missing_table.csv")
+last_update_csv = "last_tick_update.csv"
+missing_group_csv = "missing_day_group.csv"
+missing_table_csv = "missing_table.csv"
 
 def is_dataset_good(dset):
     try:
@@ -44,8 +44,13 @@ def scan_hdf5(file_path):
                     num_days = calendar.monthrange(year_num, month_num)[1]
 
                     for day_num in range(1, num_days + 1):
+                        date_obj = datetime(year_num, month_num, day_num)
+                        if date_obj.weekday() == 5:  # Skip Saturdays
+                            continue
+
                         day_key = f'd{str(day_num).zfill(2)}'
-                        date_str = f"{year_num}-{str(month_num).zfill(2)}-{str(day_num).zfill(2)}"
+                        date_str = date_obj.strftime("%Y-%m-%d")
+
                         try:
                             day_group = month_group[day_key]
                             if "table" in day_group:
@@ -54,13 +59,10 @@ def scan_hdf5(file_path):
                                     last_good_date = date_str
                                 else:
                                     missing_tables.append([instrument, date_str])
-                                    return last_updates, missing_groups, missing_tables
                             else:
                                 missing_tables.append([instrument, date_str])
-                                return last_updates, missing_groups, missing_tables
                         except KeyError:
                             missing_groups.append([instrument, date_str])
-                            return last_updates, missing_groups, missing_tables
 
             if last_good_date:
                 last_updates.append([instrument, last_good_date])
@@ -76,16 +78,21 @@ with open(last_update_csv, "w", newline="", encoding="utf-8") as last_file, \
     group_writer = csv.writer(group_file)
     table_writer = csv.writer(table_file)
 
+    last_writer.writerow(["Instrument", "Last Good Date"])
+    group_writer.writerow(["Instrument", "Missing Day Group"])
+    table_writer.writerow(["Instrument", "Missing Table Dataset"])
+
     for filename in os.listdir(folder_path):
         if filename.lower().endswith(".h5"):
             file_path = os.path.join(folder_path, filename)
             try:
+                print(f"🔍 Scanning {filename}...")
                 last_rows, group_rows, table_rows = scan_hdf5(file_path)
                 last_writer.writerows(last_rows)
                 group_writer.writerows(group_rows)
                 table_writer.writerows(table_rows)
             except Exception as e:
-                print(f"Error scanning {filename}: {e}")
+                print(f"❌ Error scanning {filename}: {e}")
 
 print("✅ Scan completed.")
 print(f"→ Last tick updates saved to: {last_update_csv}")
