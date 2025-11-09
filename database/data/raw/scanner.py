@@ -3,29 +3,38 @@ from datetime import datetime
 import os
 import csv
 import calendar
+import argparse
+from concurrent.futures import ProcessPoolExecutor, as_completed
 
-# === Use current working directory ===
-folder_path = "tick_data"  # Adjust if needed
+# === Argument parser ===
+def parse_args():
+    parser = argparse.ArgumentParser(description="Scan HDF5 tick data for integrity.")
+    parser.add_argument("--start-date", type=str, help="Start date in YYYY-MM-DD format")
+    parser.add_argument("--end-date", type=str, help="End date in YYYY-MM-DD format")
+    args = parser.parse_args()
+    start = datetime.strptime(args.start_date, "%Y-%m-%d") if args.start_date else None
+    end = datetime.strptime(args.end_date, "%Y-%m-%d") if args.end_date else None
+    return start, end
 
-# === Output CSV paths ===
-last_update_csv = "last_tick_update.csv"
-missing_group_csv = "missing_day_group.csv"
-missing_table_csv = "missing_table.csv"
-
+# === Dataset validation ===
 def is_dataset_good(dset):
     try:
-        _ = dset[...]  # attempt to read all data
+        _ = dset[...]
         return True
     except Exception:
         return False
 
-def scan_hdf5(file_path):
-    """
-    Scan an HDF5 file and return:
-    - last good date per instrument
-    - list of missing day groups
-    - list of missing tables
-    """
+# === Date generator excluding Saturdays ===
+def valid_dates(year, month):
+    num_days = calendar.monthrange(year, month)[1]
+    for day in range(1, num_days + 1):
+        date_obj = datetime(year, month, day)
+        if date_obj.weekday() == 5:  # Saturday
+            continue
+        yield date_obj
+
+# === HDF5 scanner ===
+def scan_hdf5(file_path, start_date=None, end_date=None):
     last_updates = []
     missing_groups = []
     missing_tables = []
@@ -35,66 +44,87 @@ def scan_hdf5(file_path):
             last_good_date = None
 
             for year_key in sorted(f[instrument].keys(), key=lambda x: int(x[1:])):
-                year_num = int(year_key[1:])
+                year = int(year_key[1:])
                 year_group = f[instrument][year_key]
 
                 for month_key in sorted(year_group.keys(), key=lambda x: int(x[1:])):
-                    month_num = int(month_key[1:])
+                    month = int(month_key[1:])
                     month_group = year_group[month_key]
-                    num_days = calendar.monthrange(year_num, month_num)[1]
 
-                    for day_num in range(1, num_days + 1):
-                        date_obj = datetime(year_num, month_num, day_num)
-                        if date_obj.weekday() == 5:  # Skip Saturdays
-                            continue
-
-                        day_key = f'd{str(day_num).zfill(2)}'
+                    for date_obj in valid_dates(year, month):
                         date_str = date_obj.strftime("%Y-%m-%d")
+                        day_key = f'd{str(date_obj.day).zfill(2)}'
 
                         try:
                             day_group = month_group[day_key]
-                            if "table" in day_group:
-                                dataset = day_group["table"]
-                                if is_dataset_good(dataset):
-                                    last_good_date = date_str
-                                else:
-                                    missing_tables.append([instrument, date_str])
+                            if "table" in day_group and is_dataset_good(day_group["table"]):
+                                last_good_date = date_str
                             else:
-                                missing_tables.append([instrument, date_str])
+                                if (not start_date or date_obj >= start_date) and (not end_date or date_obj <= end_date):
+                                    missing_tables.append([instrument, date_str])
                         except KeyError:
-                            missing_groups.append([instrument, date_str])
+                            if (not start_date or date_obj >= start_date) and (not end_date or date_obj <= end_date):
+                                missing_groups.append([instrument, date_str])
 
             if last_good_date:
                 last_updates.append([instrument, last_good_date])
 
     return last_updates, missing_groups, missing_tables
 
-# === Prepare CSV writers ===
-with open(last_update_csv, "w", newline="", encoding="utf-8") as last_file, \
-     open(missing_group_csv, "w", newline="", encoding="utf-8") as group_file, \
-     open(missing_table_csv, "w", newline="", encoding="utf-8") as table_file:
+# === CSV writer ===
+def write_csv(filename, header, rows):
+    with open(filename, "w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerow(header)
+        writer.writerows(rows)
 
-    last_writer = csv.writer(last_file)
-    group_writer = csv.writer(group_file)
-    table_writer = csv.writer(table_file)
+# === Worker wrapper ===
+def process_file(args):
+    filename, folder_path, start_date, end_date = args
+    file_path = os.path.join(folder_path, filename)
+    try:
+        print(f"🔍 Scanning {filename}...")
+        last_rows, group_rows, table_rows = scan_hdf5(file_path, start_date, end_date)
+        print(f"✅ {filename}: {len(last_rows)} updates, {len(group_rows)} missing groups, {len(table_rows)} missing tables")
+        return last_rows, group_rows, table_rows
+    except Exception as e:
+        print(f"❌ Error scanning {filename}: {e}")
+        return [], [], []
 
-    last_writer.writerow(["Instrument", "Last Good Date"])
-    group_writer.writerow(["Instrument", "Missing Day Group"])
-    table_writer.writerow(["Instrument", "Missing Table Dataset"])
+# === Main execution ===
+def main():
+    start_date, end_date = parse_args()
 
-    for filename in os.listdir(folder_path):
-        if filename.lower().endswith(".h5"):
-            file_path = os.path.join(folder_path, filename)
-            try:
-                print(f"🔍 Scanning {filename}...")
-                last_rows, group_rows, table_rows = scan_hdf5(file_path)
-                last_writer.writerows(last_rows)
-                group_writer.writerows(group_rows)
-                table_writer.writerows(table_rows)
-            except Exception as e:
-                print(f"❌ Error scanning {filename}: {e}")
+    folder_path = "2015_tick_data"
+    last_update_csv = "last_tick_update.csv"
+    missing_group_csv = "missing_day_group.csv"
+    missing_table_csv = "missing_table.csv"
 
-print("✅ Scan completed.")
-print(f"→ Last tick updates saved to: {last_update_csv}")
-print(f"→ Missing day groups saved to: {missing_group_csv}")
-print(f"→ Missing tables saved to: {missing_table_csv}")
+    h5_files = [f for f in os.listdir(folder_path) if f.lower().endswith(".h5")]
+    print(f"📁 Found {len(h5_files)} HDF5 files in {folder_path}")
+
+    all_last_updates = []
+    all_missing_groups = []
+    all_missing_tables = []
+
+    with ProcessPoolExecutor(max_workers=32) as executor:
+        tasks = [(f, folder_path, start_date, end_date) for f in h5_files]
+        futures = [executor.submit(process_file, task) for task in tasks]
+
+        for future in as_completed(futures):
+            last_rows, group_rows, table_rows = future.result()
+            all_last_updates.extend(last_rows)
+            all_missing_groups.extend(group_rows)
+            all_missing_tables.extend(table_rows)
+
+    write_csv(last_update_csv, ["Instrument", "Last Good Date"], all_last_updates)
+    write_csv(missing_group_csv, ["Instrument", "Missing Day Group"], all_missing_groups)
+    write_csv(missing_table_csv, ["Instrument", "Missing Table Dataset"], all_missing_tables)
+
+    print("🏁 Scan completed.")
+    print(f"→ Last tick updates saved to: {last_update_csv}")
+    print(f"→ Missing day groups saved to: {missing_group_csv}")
+    print(f"→ Missing tables saved to: {missing_table_csv}")
+
+if __name__ == "__main__":
+    main()
