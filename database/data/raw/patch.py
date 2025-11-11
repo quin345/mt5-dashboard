@@ -1,4 +1,5 @@
 import csv
+import ast
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
@@ -17,12 +18,17 @@ with open(csv_file, newline='', encoding='utf-8') as f:
         if len(row) < 2:
             continue
         instrument = row[0].strip()
-        date_str = row[1].strip()
         try:
-            date = datetime.strptime(date_str, "%Y-%m-%d")
-            instrument_dates[instrument].append(date)
-        except ValueError:
-            print(f"⚠️ Invalid date format: {date_str}")
+            # Safely parse the stringified list of dates
+            date_list = ast.literal_eval(row[1])
+            for date_str in date_list:
+                try:
+                    date = datetime.strptime(date_str, "%Y-%m-%d")
+                    instrument_dates[instrument].append(date)
+                except ValueError:
+                    print(f"⚠️ Invalid date format: {date_str}")
+        except Exception as e:
+            print(f"⚠️ Failed to parse date list for {instrument}: {e}")
 
 # === Function to process one instrument's dates ===
 def process_instrument(instrument, dates):

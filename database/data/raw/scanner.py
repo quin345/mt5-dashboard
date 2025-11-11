@@ -4,6 +4,7 @@ import os
 import csv
 import calendar
 import argparse
+from collections import defaultdict
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
 # === Argument parser ===
@@ -71,12 +72,39 @@ def scan_hdf5(file_path, start_date=None, end_date=None):
 
     return last_updates, missing_groups, missing_tables
 
-# === CSV writer ===
+# === CSV writers ===
 def write_csv(filename, header, rows):
     with open(filename, "w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
         writer.writerow(header)
         writer.writerows(rows)
+
+def write_grouped_csv(filename, grouped_data):
+    with open(filename, "w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerow(["Instrument", "Missing Day Groups"])
+        for instrument, dates in grouped_data.items():
+            writer.writerow([instrument, dates])
+
+def write_missing_day_summary(filename, grouped_data):
+    total_missing = 0
+    rows = []
+    for instrument, dates in grouped_data.items():
+        count = len(dates)
+        total_missing += count
+        rows.append([instrument, count])
+    rows.append(["TOTAL", total_missing])
+    with open(filename, "w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerow(["Instrument", "Missing Day Count"])
+        writer.writerows(rows)
+
+# === Group missing day groups by instrument ===
+def group_missing_days(missing_groups):
+    grouped = defaultdict(list)
+    for instrument, date_str in missing_groups:
+        grouped[instrument].append(date_str)
+    return grouped
 
 # === Worker wrapper ===
 def process_file(args):
@@ -99,6 +127,7 @@ def main():
     last_update_csv = "last_tick_update.csv"
     missing_group_csv = "missing_day_group.csv"
     missing_table_csv = "missing_table.csv"
+    missing_day_summary_csv = "missing_day_summary.csv"
 
     h5_files = [f for f in os.listdir(folder_path) if f.lower().endswith(".h5")]
     print(f"📁 Found {len(h5_files)} HDF5 files in {folder_path}")
@@ -118,12 +147,15 @@ def main():
             all_missing_tables.extend(table_rows)
 
     write_csv(last_update_csv, ["Instrument", "Last Good Date"], all_last_updates)
-    write_csv(missing_group_csv, ["Instrument", "Missing Day Group"], all_missing_groups)
+    grouped_missing = group_missing_days(all_missing_groups)
+    write_grouped_csv(missing_group_csv, grouped_missing)
+    write_missing_day_summary(missing_day_summary_csv, grouped_missing)
     write_csv(missing_table_csv, ["Instrument", "Missing Table Dataset"], all_missing_tables)
 
     print("🏁 Scan completed.")
     print(f"→ Last tick updates saved to: {last_update_csv}")
     print(f"→ Missing day groups saved to: {missing_group_csv}")
+    print(f"→ Missing day summary saved to: {missing_day_summary_csv}")
     print(f"→ Missing tables saved to: {missing_table_csv}")
 
 if __name__ == "__main__":

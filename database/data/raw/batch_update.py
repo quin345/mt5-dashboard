@@ -7,7 +7,7 @@ from dukascopy_fetcher import fetch_and_store_tick_data
 csv_file = "last_tick_update.csv"  # No header row
 
 # Target end date
-end_date = datetime.strptime("2021-01-01", "%Y-%m-%d")
+end_date = datetime.strptime("2025-11-09", "%Y-%m-%d")
 
 # Function to run the fetcher
 def run_fetch(symbol, last_date_str):
