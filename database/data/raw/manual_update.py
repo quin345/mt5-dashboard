@@ -2,7 +2,7 @@
 
 import argparse
 from datetime import datetime
-from dukascopy_fetcher import fetch_and_store_tick_data
+from fetch_tick_data import fetch_and_store_tick_data
 
 parser = argparse.ArgumentParser(description="Fetch tick data from Dukascopy")
 parser.add_argument("--start", required=True, help="Start date in YYYY-MM-DD format")

@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from concurrent.futures import ThreadPoolExecutor
 import pandas as pd
 from fetch_tick_data import fetch_tick_data_for_day
-from store_tick_data import store_tick_data
+
 
 # === Step 1: Parse CSV ===
 csv_file = "missing_day_group.csv"
@@ -49,26 +49,54 @@ def worker(worker_id, tasks):
         try:
             print(f"🧵 Worker {worker_id}: {instrument} {date.date()}")
             data = fetch_tick_data_for_day(instrument, date)
+            
             if data:
                 df = pd.DataFrame(data)
-                store_tick_data(df, instrument, ".", hdf5_filename=temp_file)
+                ts = pd.to_datetime(df['timestamp'], unit='ms')
+                df['year'] = ts.dt.year
+                df['month'] = ts.dt.month
+                df['day'] = ts.dt.day
+
+                os.makedirs(".", exist_ok=True)
+
+                with pd.HDFStore(temp_file, mode='a') as store:
+                    for (y, m, d), group in df.groupby(['year', 'month', 'day']):
+                        key = f"/{instrument}/y{y}/m{m:02}/d{d:02}"
+                        store.put(key, group.drop(columns=['year', 'month', 'day']), format='table', data_columns=True) 
+                print(f"✅ Worker {worker_id} saved {instrument} {date.date()}")
+            print(f"⚠️ Worker {worker_id} no data for {instrument} {date.date()}")
         except Exception as e:
             print(f"❌ Worker {worker_id} error on {instrument} {date.date()}: {e}")
 
 # === Step 5: Run workers in parallel ===
-with ThreadPoolExecutor(max_workers=32) as executor:
+with ThreadPoolExecutor(max_workers=28) as executor:
     for i, chunk in enumerate(task_chunks):
         executor.submit(worker, i, chunk)
 
-# === Step 6: Merge temp files ===
+# === Step 6: Merge temp files (robust version) ===
 def merge_hdf5_files(temp_files, final_file):
     with pd.HDFStore(final_file, mode='a') as final_store:
         for temp in temp_files:
-            with pd.HDFStore(temp, mode='r') as temp_store:
-                for key in temp_store.keys():
-                    df = temp_store[key]
-                    final_store.put(key, df, format='table', data_columns=True)
-            os.remove(temp)
+            if not os.path.exists(temp):
+                print(f"⚠️ Skipping missing file: {temp}")
+                continue
+            try:
+                with pd.HDFStore(temp, mode='r') as temp_store:
+                    keys = temp_store.keys()
+                    if not keys:
+                        print(f"⚠️ Skipping empty file: {temp}")
+                        continue
+                    for key in keys:
+                        df = temp_store[key]
+                        final_store.put(key, df, format='table', data_columns=True)
+            except Exception as e:
+                print(f"❌ Error reading {temp}: {e}")
+            finally:
+                try:
+                    os.remove(temp)
+                    print(f"🗑️ Deleted temp file: {temp}")
+                except Exception as e:
+                    print(f"⚠️ Could not delete {temp}: {e}")
 
 temp_files = [f"temp_worker_{i}.h5" for i in range(32)]
 merge_hdf5_files(temp_files, "final_tick_data.h5")
@@ -92,3 +120,44 @@ def decompose_by_instrument(final_file, output_dir="split_by_instrument"):
 
 decompose_by_instrument("final_tick_data.h5")
 print("✅ All tasks complete. Data split by instrument.")
+
+
+# MERGE TO RAW FILES
+
+
+def merge_instrument_file(instrument, fetched_dir="split_by_instrument", raw_dir="./2015_tick_data"):
+    fetched_path = os.path.join(fetched_dir, f"{instrument}_tick_data.h5")
+    raw_path = os.path.join(raw_dir, f"{instrument}_tick_data.h5")
+
+    if not os.path.exists(fetched_path):
+        print(f"⚠️ Fetched file missing: {instrument}")
+        return
+    if not os.path.exists(raw_path):
+        print(f"⚠️ Raw file missing: {instrument}")
+        return
+
+    with pd.HDFStore(raw_path, mode='a') as raw_store, pd.HDFStore(fetched_path, mode='r') as fetched_store:
+        for key in fetched_store.keys():
+            if key in raw_store:
+                print(f"🔁 Skipping duplicate key: {key} in {instrument}")
+                continue
+            df = fetched_store[key]
+            raw_store.put(key, df, format='table', data_columns=True)
+
+    print(f"✅ Merged fetched → raw: {instrument}")
+
+
+fetched_dir = "split_by_instrument"     # Correct folder for fetched files
+raw_dir = "./2015_tick_data"            # Correct folder for raw files
+
+# Get list of instruments based on fetched files
+instruments = [
+    filename.replace("_tick_data.h5", "")
+    for filename in os.listdir(fetched_dir)
+    if filename.endswith("_tick_data.h5")
+]
+
+# Run merge in parallel
+with ThreadPoolExecutor(max_workers=28) as executor:
+    for instrument in instruments:
+        executor.submit(merge_instrument_file, instrument, fetched_dir, raw_dir)

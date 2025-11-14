@@ -3,7 +3,7 @@ import ast
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
-from dukascopy_fetcher import fetch_and_store_tick_data
+from fetch_tick_data import fetch_and_store_tick_data
 
 # === Path to your CSV file ===
 csv_file = "missing_day_group.csv"

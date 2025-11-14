@@ -5,7 +5,11 @@ from tables import NaturalNameWarning
 
 warnings.filterwarnings("ignore", category=NaturalNameWarning)
 
-def store_tick_data(df: pd.DataFrame, asset: str, save_dir: str):
+def store_tick_data(df: pd.DataFrame, asset: str, save_dir: str = "2015_tick_data"):
+    if df.empty:
+        print(f"⚠️ No data to store for {asset}")
+        return
+
     ts = pd.to_datetime(df['timestamp'], unit='ms')
     df['year'] = ts.dt.year
     df['month'] = ts.dt.month
@@ -17,4 +21,9 @@ def store_tick_data(df: pd.DataFrame, asset: str, save_dir: str):
     with pd.HDFStore(hdf5_path, mode='a') as store:
         for (y, m, d), group in df.groupby(['year', 'month', 'day']):
             key = f"/{asset}/y{y}/m{m:02}/d{d:02}"
-            store.put(key, group.drop(columns=['year', 'month', 'day']), format='table', data_columns=True)
+            if key in store:
+                existing = store[key]
+                combined = pd.concat([existing, group.drop(columns=['year', 'month', 'day'])])
+                store.put(key, combined, format='table', data_columns=True)
+            else:
+                store.put(key, group.drop(columns=['year', 'month', 'day']), format='table', data_columns=True)
