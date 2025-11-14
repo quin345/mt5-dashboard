@@ -136,7 +136,7 @@ def main():
     all_missing_groups = []
     all_missing_tables = []
 
-    with ProcessPoolExecutor(max_workers=32) as executor:
+    with ProcessPoolExecutor(max_workers=28) as executor:
         tasks = [(f, folder_path, start_date, end_date) for f in h5_files]
         futures = [executor.submit(process_file, task) for task in tasks]
 
