@@ -1,4 +1,4 @@
-# 🧠 Portfolio Management System
+# Portfolio Management System
 
 A **broker-agnostic, active portfolio management system**. Market data flows in from **multiple data vendors** (normalized into one internal schema); brokers are strictly optional pluggable adapters. The system consolidates positions across accounts and provides **analytics, risk monitoring, optimization, and rebalancing** for a self-directed, active, discretionary portfolio manager.
 
